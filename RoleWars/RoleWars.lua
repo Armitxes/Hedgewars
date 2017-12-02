@@ -3,6 +3,8 @@
 --  by armitxes (armitxes.net)  --
 ----------------------------------
 
+-- Note: This is my first LUA Script ;) sorry for any mistakes
+
 --  Roles  --
 -- All: Skip turn, Green Nade
 -- Pyromaniac: FirePunch, Flamethrower, Molotov, HellishBomb, Napalm
@@ -19,8 +21,6 @@ HedgewarsScriptLoad("/Scripts/Tracker.lua")
 
 
 ---------- VARS ----------
-local gameTurn = 0
-
 local cfgRoles = {
     ['Pyromaniac']={ [amFirePunch]=1, [amFlamethrower]=1, [amMolotov]=2, [amHellishBomb]=4, [amNapalm]=5 },
     ['Miner']={ [amPickHammer]=1, [amBlowTorch]=1, [amDrill]=3, [amBallgun]=4, [amDynamite]=5, [amDrillStrike]=5 },
@@ -38,16 +38,13 @@ local getRoleById = {
 local hogRoles = {}
 local hogRoles2 = {}
 local hogMana = {}
+local hogTurns = {}
 
 ---------- FUNCTIONS ----------
 function onGameInit() 
     DisableGameFlags(gfInfAttack)
     EnableGameFlags(gfResetWeps)
     Goals = "Pick a role. Defeat the enemies."
-    
-    -- Disable Sudden Death
-    WaterRise = 0
-    HealthDecrease = 0
 end
 
 function onAmmoStoreInit()
@@ -72,9 +69,9 @@ function onAmmoStoreInit()
 end
 
 function onNewTurn()
-    gameTurn = gameTurn + 1
+    local cHog = CurrentHedgehog;
 
-    if hogRoles[CurrentHedgehog] == null then
+    if hogRoles[cHog] == null then
         TurnTimeLeft = TurnTimeLeft + 15
 
         r1 = GetRandom(6)
@@ -86,35 +83,57 @@ function onNewTurn()
             r2 = r2 + 1
         end
 
-        hogMana[CurrentHedgehog] = 0
-        hogRoles[CurrentHedgehog] = getRoleById[r1]
-        hogRoles2[CurrentHedgehog] = getRoleById[r2]
-        
-        HogSay(CurrentHedgehog, "Guess I'm becoming a " .. hogRoles[CurrentHedgehog], SAY_THINK)
+        hogMana[cHog] = 0
+        hogTurns[cHog] = 0
+        hogRoles[cHog] = getRoleById[r1]
+        hogRoles2[cHog] = getRoleById[r2]
+
+        HogSay(cHog, "Guess I'm becoming a " .. hogRoles[cHog], SAY_THINK)
     end
 
-    AddCaption(GetHogName(CurrentHedgehog) .. " the " .. hogRoles[CurrentHedgehog], 0xFF0000FF, capgrpGameState)
-    addRoleWeapons(CurrentHedgehog)
+    AddCaption(GetHogName(cHog) .. " the " .. hogRoles[cHog], 0xFF0000FF, capgrpGameState)
+    hogMana[cHog] = hogMana[cHog] + 2
+    hogTurns[cHog] = hogTurns[cHog] + 1
+
+    addRoleWeapons(cHog)
+end
+
+function onUsedAmmo(ammo)
+    local cHog = CurrentHedgehog
+
+    if ammo == amTeleport then
+        hogMana[cHog] = hogMana[cHog] - 6
+    elseif ammo ~= amSkip and ammo ~= amGrenade then
+        weapons = TableConcat(cfgRoles[hogRoles[cHog]], cfgRoles[hogRoles2[cHog]])
+        hogMana[cHog] = hogMana[cHog] - weapons[ammo]
+    end
 end
 
 function addRoleWeapons(hog)
-    local mana = getTeamValue(GetHogTeamName(hog), "mana")
-
     local cfgRole = cfgRoles[hogRoles[hog]]
-    hogMana[CurrentHedgehog] = hogMana[CurrentHedgehog] + 2
+    local roleText = hogRoles[hog]
+
+    if hogTurns[hog] > 6 then
+        cfgRole = TableConcat(cfgRole, cfgRoles[hogRoles2[hog]])
+        roleText = hogRoles[hog] .. " & " .. hogRoles2[hog]
+    end
+
+    HogSay(hog, roleText .. ", Mana: " .. hogMana[hog], SAY_THINK)
 
     for weapon,cost in pairs(cfgRole) do
-        if hogMana[CurrentHedgehog] >= cost then
+        if hogMana[hog] >= cost then
             AddAmmo(hog, weapon, 1)
         end
     end
 
-    if gameTurn > 15 then
-        local cfgRole2 = cfgRoles[hogRoles2[hog]]
-        for weapon,cost in pairs(cfgRole2) do
-            if hogMana[CurrentHedgehog] >= cost then
-                AddAmmo(hog, weapon, 1)
-            end
-        end
+    if hogMana[hog] > 6 then
+        AddAmmo(hog, amTeleport, 1)
     end
+end
+
+function TableConcat(t1,t2)
+    for index,value in pairs(t2) do
+        t1[index] = value
+    end
+    return t1
 end
